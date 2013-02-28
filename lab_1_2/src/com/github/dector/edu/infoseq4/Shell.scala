@@ -20,15 +20,19 @@ object Shell {
 	val PasswordRequest	= "Enter password: "
 	val LoginFailedMsg	= "Login failed"
 	val LoginSuccessMsg	= "Hello, %s!%n"
+	val UsernameMsg	= "User: %s%n"
+	val UsergroupsMsg	= "Groups: "
 	val Delimiter 	= " "
 
 	val LoginCommand= "login"
 	val LsCommand 	= "ls"
+	val UserCommand	= "user"
 	val ExitCommand = "exit"
 
 	val modules = Map (
 		LoginCommand -> Modules.login,
-		LsCommand -> Modules.ls
+		LsCommand -> Modules.ls,
+		UserCommand -> Modules.user
 	)
 
 	val userGroups = new HashMap[String, List[String]]()
@@ -107,5 +111,17 @@ object Modules {
 		}
 
 		logged
+	}
+
+	val user = (args: Array[String]) => {
+		printf(Shell.UsernameMsg, Shell.currentUser)
+
+		val groups = Shell.userGroups.get(Shell.currentUser)
+
+		print(Shell.UsergroupsMsg)
+		for (i <- 0 to groups.size) {
+			print(groups.get(i) + (if (i != groups.size - 1) "," else ""))
+		}
+		println()
 	}
 }
