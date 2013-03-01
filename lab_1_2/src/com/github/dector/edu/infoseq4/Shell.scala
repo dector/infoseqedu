@@ -10,15 +10,15 @@ import java.io.{FilenameFilter, File}
  */
 object Shell {
 
+	// Globalization :(
+
 	val SystemDir 	= "testSystem/"
 	val EtcDir		= SystemDir + "etc/"
 	val UsersFile	= EtcDir + "users"
 	val PasswordsFile	= EtcDir + "passwd"
 	val RootDir		= "/"
 	val ParentDir	= ".."
-	val HomeDir		= RootDir + "home/"
-
-//	val SystemDirFile = new File(SystemDir)
+	val HomeDir		= "home/"
 
 	val FolderFile	= ".folder"
 	val FilenameFilter = new java.io.FilenameFilter() {
@@ -61,12 +61,6 @@ object Shell {
 		call(LoginCommand, Array.empty)
 
 		var finished = currentUser == ""
-		if (finished) {
-			println(LoginFailedMsg)
-		} else {
-			printf(LoginSuccessMsg, currentUser)
-			loadUsers()
-		}
 
 		while (! finished) {
 			val input = readLine(currentDirLocal + " " + Prompt)
@@ -93,7 +87,7 @@ object Shell {
 		}
 	}
 
-	private def loadUsers() {
+	def loadUsers() {
 		Source.fromFile(UsersFile).getLines() foreach ((line) => {
 			val groups = line.split(Delimiter)
 
@@ -113,11 +107,7 @@ object Shell {
 object Modules {
 	val cd = (args: Array[String]) => {
 		if (Shell.currentDir != null && args.length > 0) {
-			val dirName = args(0)
-
-			if (Shell.currentDirLocal != Shell.RootDir) {
-				changeDir(dirName)
-			}
+			changeDir(args(0))
 		}
 	}
 
@@ -150,14 +140,20 @@ object Modules {
 			val parts = line.split(Shell.Delimiter)
 
 			if (parts.length == 2 && user == parts(0) && userPass == parts(1)) {
-				// Globalization :)
 				Shell.currentUser = parts(0)
-				changeDir(Shell.RootDir + Shell.HomeDir + Shell.currentUser)
 				logged = true
 			}
 		}
 
-		logged
+		if (logged) {
+			printf(Shell.LoginSuccessMsg, Shell.currentUser)
+			Shell.loadUsers()
+			if (! changeDir(Shell.RootDir + Shell.HomeDir + Shell.currentUser)) {
+				changeDir(Shell.RootDir)
+			}
+		} else {
+			println(Shell.LoginFailedMsg)
+		}
 	}
 
 	val user = (args: Array[String]) => {
@@ -178,36 +174,28 @@ object Modules {
 
 	private def changeDir(dir: String): Boolean = {
 		val dirFile =
-		if (dir.startsWith(Shell.RootDir)) {
+		if (dir == Shell.RootDir) {
+			new File(Shell.SystemDir)
+		} else if (dir.startsWith(Shell.RootDir)) {
 			new File(Shell.SystemDir, dir)
-		} else if (dir != Shell.ParentDir) {
-			new File(Shell.SystemDir + Shell.currentDirLocal, dir)
-		} else {
+		} else if (dir == Shell.ParentDir) {
 			Shell.currentDir.getParentFile
-//			val dirs = Shell.currentDir.listFiles(new FilenameFilter {
-//				def accept(dir: File, name: String): Boolean = name == dir
-//			})
-//			val dirFile = if (dirs.length > 0) dirs(0) else null
-//
-//			if (dirFile != null) {
-//				if (DirParams(dirFile).canExecute(Shell.currentUser, Shell.userGroups.get(Shell.currentUser))) {
-//
-//				} else {
-//					println(Shell.AccessDenied)
-//					success = false
-//				}
-//			} else {
-//				println(Shell.DirNotFound + dir)
-//				success = false
-//			}
+		} else {
+			new File(Shell.SystemDir + Shell.currentDirLocal, dir)
 		}
 
 		if (dirFile.exists()) {
 			if (DirParams(dirFile).canExecute(Shell.currentUser, Shell.userGroups.get(Shell.currentUser))) {
 				Shell.currentDir = dirFile
-				Shell.currentDirLocal = Shell.currentDir.getPath.replace("\\", "/")
-				Shell.currentDirLocal = Shell.currentDirLocal.substring(Shell.currentDirLocal.indexOf("/"), Shell.currentDirLocal.length)
-				//		println(Shell.currentDirLocal)
+
+				Shell.currentDirLocal =
+				if (dirFile == new File(Shell.SystemDir)) {
+					Shell.RootDir
+				} else {
+					Shell.currentDirLocal = Shell.currentDir.getPath.replace("\\", "/")
+					Shell.currentDirLocal = Shell.currentDirLocal.substring(Shell.currentDirLocal.indexOf(Shell.RootDir))
+					Shell.currentDirLocal
+				}
 				true
 			} else {
 				println(Shell.AccessDenied)
