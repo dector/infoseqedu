@@ -1,0 +1,1 @@
+Current Scala version in use: 2.9.3
