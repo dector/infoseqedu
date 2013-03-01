@@ -3,7 +3,7 @@ package com.github.dector.edu.infoseq4
 import io.Source
 import java.util.{HashMap, List, ArrayList}
 import java.util
-import java.io.File
+import java.io.{FilenameFilter, File}
 
 /**
  * @author dector
@@ -15,9 +15,10 @@ object Shell {
 	val UsersFile	= EtcDir + "users"
 	val PasswordsFile	= EtcDir + "passwd"
 	val RootDir		= "/"
+	val ParentDir	= ".."
 	val HomeDir		= RootDir + "home/"
 
-	val SystemDirFile = new File(SystemDir)
+//	val SystemDirFile = new File(SystemDir)
 
 	val FolderFile	= ".folder"
 	val FilenameFilter = new java.io.FilenameFilter() {
@@ -32,23 +33,29 @@ object Shell {
 	val LoginSuccessMsg	= "Hello, %s!%n"
 	val UsernameMsg	= "User: %s%n"
 	val UsergroupsMsg	= "Groups: "
+	val CommandNotFound	= "Command not found: "
+	val AccessDenied	= "Access denied"
+	val DirNotFound		= "Directory not found: "
 	val Delimiter 	= " "
 
 	val LoginCommand= "login"
 	val LsCommand 	= "ls"
+	val CdCommand 	= "cd"
 	val UserCommand	= "user"
 	val ExitCommand = "exit"
 
 	val modules = Map (
 		LoginCommand -> Modules.login,
 		LsCommand -> Modules.ls,
+		CdCommand -> Modules.cd,
 		UserCommand -> Modules.user
 	)
 
-	val userGroups = new HashMap[String, List[String]]()
+	val userGroups = new HashMap[String, Array[String]]()
 
 	var currentUser = ""
 	var currentDir: File = null
+	var currentDirLocal = ""
 
 	def main (args: Array[String]) {
 		call(LoginCommand, Array.empty)
@@ -62,7 +69,7 @@ object Shell {
 		}
 
 		while (! finished) {
-			val input = readLine(Prompt)
+			val input = readLine(currentDirLocal + " " + Prompt)
 
 			if (input == ExitCommand) {
 				finished = true 
@@ -78,7 +85,13 @@ object Shell {
 		println(GoodbyeMsg)
 	}
 
-	private def call(command: String, args: Array[String]) = modules(command)(args)
+	private def call(command: String, args: Array[String]) = {
+		if (modules.contains(command)) {
+			modules(command)(args)
+		} else {
+			Modules.error(command)
+		}
+	}
 
 	private def loadUsers() {
 		Source.fromFile(UsersFile).getLines() foreach ((line) => {
@@ -87,31 +100,39 @@ object Shell {
 			if (groups.length > 0) {
 				val username = groups(0)
 
-				userGroups.put(username, new ArrayList[String]())
-				groups.drop(1) foreach ((group) => {
-					userGroups.get(username).add(group)
-				})
+				val groupsArray = new Array[String](groups.length - 1)
+				for (i <- 0 until groupsArray.length) {
+					groupsArray(i) = groups(i + 1)
+				}
+				userGroups.put(username, groupsArray)
 			}
 		})
 	}
 }
 
 object Modules {
-	val ls = (args: Array[String]) => {
-		println("ls executed with: " + args.mkString(", "))
+	val cd = (args: Array[String]) => {
+		if (Shell.currentDir != null && args.length > 0) {
+			val dirName = args(0)
 
-		println(Shell.currentDir);
-
-		println(".")
-		if (Shell.currentDir != Shell.SystemDirFile) {
-			println("..")
+			if (Shell.currentDirLocal != Shell.RootDir) {
+				changeDir(dirName)
+			}
 		}
+	}
 
-		if (Shell.currentDir != null) {
-			val files = Shell.currentDir.listFiles(Shell.FilenameFilter);
-			files foreach ((file) => {
-				println(file.getName)
-			})
+	val ls = (args: Array[String]) => {
+		if (Shell.currentDir != null && Shell.currentDir.exists()) {
+			if (DirParams(Shell.currentDir).canRead(Shell.currentUser, Shell.userGroups.get(Shell.currentUser))) {
+				val files = Shell.currentDir.listFiles(Shell.FilenameFilter)
+				files foreach ((file) => {
+					println(file.getName + (if (file.isDirectory) "/" else ""))
+				})
+			} else {
+				println(Shell.AccessDenied)
+			}
+		} else {
+			println(Shell.DirNotFound + Shell.currentDirLocal)
 		}
 	}
 
@@ -131,7 +152,7 @@ object Modules {
 			if (parts.length == 2 && user == parts(0) && userPass == parts(1)) {
 				// Globalization :)
 				Shell.currentUser = parts(0)
-				Shell.currentDir = new File(Shell.SystemDir + Shell.HomeDir + Shell.currentUser)
+				changeDir(Shell.RootDir + Shell.HomeDir + Shell.currentUser)
 				logged = true
 			}
 		}
@@ -145,9 +166,127 @@ object Modules {
 		val groups = Shell.userGroups.get(Shell.currentUser)
 
 		print(Shell.UsergroupsMsg)
-		for (i <- 0 to groups.size) {
-			print(groups.get(i) + (if (i != groups.size - 1) "," else ""))
+		for (i <- 0 until groups.size) {
+			print(groups(i) + (if (i != groups.size - 1) "," else ""))
 		}
 		println()
+	}
+
+	val error = (command: String) => {
+		println(Shell.CommandNotFound + command)
+	}
+
+	private def changeDir(dir: String): Boolean = {
+		val dirFile =
+		if (dir.startsWith(Shell.RootDir)) {
+			new File(Shell.SystemDir, dir)
+		} else if (dir != Shell.ParentDir) {
+			new File(Shell.SystemDir + Shell.currentDirLocal, dir)
+		} else {
+			Shell.currentDir.getParentFile
+//			val dirs = Shell.currentDir.listFiles(new FilenameFilter {
+//				def accept(dir: File, name: String): Boolean = name == dir
+//			})
+//			val dirFile = if (dirs.length > 0) dirs(0) else null
+//
+//			if (dirFile != null) {
+//				if (DirParams(dirFile).canExecute(Shell.currentUser, Shell.userGroups.get(Shell.currentUser))) {
+//
+//				} else {
+//					println(Shell.AccessDenied)
+//					success = false
+//				}
+//			} else {
+//				println(Shell.DirNotFound + dir)
+//				success = false
+//			}
+		}
+
+		if (dirFile.exists()) {
+			if (DirParams(dirFile).canExecute(Shell.currentUser, Shell.userGroups.get(Shell.currentUser))) {
+				Shell.currentDir = dirFile
+				Shell.currentDirLocal = Shell.currentDir.getPath.replace("\\", "/")
+				Shell.currentDirLocal = Shell.currentDirLocal.substring(Shell.currentDirLocal.indexOf("/"), Shell.currentDirLocal.length)
+				//		println(Shell.currentDirLocal)
+				true
+			} else {
+				println(Shell.AccessDenied)
+				false
+			}
+		} else {
+			println(Shell.DirNotFound + dir)
+			false
+		}
+	}
+}
+
+class DirParams(
+	val user: String = "",
+	val group: String = "",
+
+	val userRead: Boolean = false,
+	val userWrite: Boolean = false,
+	val userExecute: Boolean = false,
+
+	val groupRead: Boolean = false,
+	val groupWrite: Boolean = false,
+	val groupExecute: Boolean = false,
+
+	val otherRead: Boolean = false,
+	val otherWrite: Boolean = false,
+	val otherExecute: Boolean = false
+) {
+
+	def canRead(name: String, groups: Array[String]) = {
+		user == name && userRead || groups.forall(userGroup => group == userGroup && groupRead ) || otherRead
+	}
+
+	def canWrite(name: String, groups: Array[String]) = {
+		user == name && userWrite || groups.forall(userGroup => group == userGroup && groupWrite ) || otherWrite
+	}
+
+	def canExecute(name: String, groups: Array[String]) = {
+		user == name && userExecute || groups.forall(userGroup => group == userGroup && groupExecute ) || otherExecute
+	}
+}
+
+object DirParams {
+	def apply(dir: File): DirParams = {
+		val folderFile = dir.listFiles(new FilenameFilter {
+			def accept(dir: File, name: String): Boolean = name == Shell.FolderFile
+		})
+
+		if (folderFile.length > 0) {
+			val lines = Source.fromFile(folderFile(0)).getLines()
+			if (lines.hasNext) {
+				val lineParts = lines.next().split(Shell.Delimiter)
+
+				if (lineParts.length == 3) {
+					val owner = lineParts(0)
+					val group = lineParts(1)
+					val permissions = lineParts(2)
+
+					if (permissions.length == 9) {
+						new DirParams(owner, group,
+							checkRead(permissions(0)), checkWrite(permissions(1)), checkExecute(permissions(2)),
+							checkRead(permissions(3)), checkWrite(permissions(4)), checkExecute(permissions(5)),
+							checkRead(permissions(6)), checkWrite(permissions(7)), checkExecute(permissions(8))
+						)
+					} else new DirParams()
+				} else new DirParams()
+			} else new DirParams()
+		} else new DirParams()
+	}
+
+	private def checkRead(opt: Char) = {
+		opt == 'r'
+	}
+
+	private def checkWrite(opt: Char) = {
+		opt == 'w'
+	}
+
+	private def checkExecute(opt: Char) = {
+		opt == 'x'
 	}
 }
