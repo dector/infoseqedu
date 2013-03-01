@@ -3,6 +3,7 @@ package com.github.dector.edu.infoseq4
 import io.Source
 import java.util.{HashMap, List, ArrayList}
 import java.util
+import java.io.File
 
 /**
  * @author dector
@@ -13,6 +14,15 @@ object Shell {
 	val EtcDir		= SystemDir + "etc/"
 	val UsersFile	= EtcDir + "users"
 	val PasswordsFile	= EtcDir + "passwd"
+	val RootDir		= "/"
+	val HomeDir		= RootDir + "home/"
+
+	val SystemDirFile = new File(SystemDir)
+
+	val FolderFile	= ".folder"
+	val FilenameFilter = new java.io.FilenameFilter() {
+		def accept(dir: File, name: String): Boolean = name != FolderFile
+	}
 
 	val Prompt 		= "> "
 	val GoodbyeMsg 	= "See ya!"
@@ -38,6 +48,7 @@ object Shell {
 	val userGroups = new HashMap[String, List[String]]()
 
 	var currentUser = ""
+	var currentDir: File = null
 
 	def main (args: Array[String]) {
 		call(LoginCommand, Array.empty)
@@ -88,6 +99,20 @@ object Shell {
 object Modules {
 	val ls = (args: Array[String]) => {
 		println("ls executed with: " + args.mkString(", "))
+
+		println(Shell.currentDir);
+
+		println(".")
+		if (Shell.currentDir != Shell.SystemDirFile) {
+			println("..")
+		}
+
+		if (Shell.currentDir != null) {
+			val files = Shell.currentDir.listFiles(Shell.FilenameFilter);
+			files foreach ((file) => {
+				println(file.getName)
+			})
+		}
 	}
 
 	val login = (args: Array[String]) => {
@@ -106,6 +131,7 @@ object Modules {
 			if (parts.length == 2 && user == parts(0) && userPass == parts(1)) {
 				// Globalization :)
 				Shell.currentUser = parts(0)
+				Shell.currentDir = new File(Shell.SystemDir + Shell.HomeDir + Shell.currentUser)
 				logged = true
 			}
 		}
